@@ -1,0 +1,48 @@
+=head1 NAME
+
+tmp102d -  monitor temperature from TMP102 using i2c
+
+=head1 SYNOPSIS
+
+B<tmp102d> 
+
+=head1 DESCRIPTION
+
+The B<tmp102d> is used to read temperature data from TMP102 on Raspberry Pi
+using i2c bus. The daemon is started with command 
+
+B<service> I<tmp102d> I<start>
+
+and can be stopped any time with
+
+B<service> I<tmp102d> I<stop>
+
+The operation of the daemon can be checked from the log file.
+
+=head1 FILES
+
+I</etc/logrotate.d/tmp102d>        Log rotation configuration file.
+
+I</etc/init.d/tmp102d>             Init script.
+
+I</usr/sbin/tmp102d>               Daemon code.
+
+I</var/lib/tmp102d/temperature>    Live temperature value.
+
+I</var/log/tmp102d.log>            Log file.
+
+I</var/run/tmp102d.pid>            PID file.
+
+=head1 WARNING
+
+No check is done where the query data is written. Could make some hardware 
+unusable.
+
+=head1 AUTHORS
+
+Jaakko Koivuniemi 
+
+=head1 SEE ALSO
+
+i2cdetect(8), i2cset(8), i2cget(8)
+
