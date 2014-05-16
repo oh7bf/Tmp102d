@@ -21,6 +21,8 @@ The operation of the daemon can be checked from the log file.
 
 =head1 FILES
 
+I</etc/tmp102d_config>             Configuration file. 
+
 I</etc/logrotate.d/tmp102d>        Log rotation configuration file.
 
 I</etc/init.d/tmp102d>             Init script.

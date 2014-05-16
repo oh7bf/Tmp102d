@@ -20,7 +20,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Sun Apr 27 22:21:34 CEST 2014
+ * Edit: Fri May 16 22:28:37 CEST 2014
  *
  * Jaakko Koivuniemi
  **/
@@ -38,14 +38,16 @@
 #include <time.h>
 #include <signal.h>
 
-const int version=20140427; // program version
-const int tempint=300; // temperature reading interval [s]
+const int version=20140516; // program version
+int tempint=300; // temperature reading interval [s]
 
 const char tdatafile[200]="/var/lib/tmp102d/temperature";
 
 const char i2cdev[100]="/dev/i2c-1";
-const int  address=0x4a;
+int  address=0x4a;
 const int  i2lockmax=10; // maximum number of times to try lock i2c port  
+
+const char confile[200]="/etc/tmp102d_config";
 
 const char pidfile[200]="/var/run/tmp102d.pid";
 
@@ -78,6 +80,60 @@ void logmessage(const char logfile[200], const char message[200], int loglev, in
     }
   }
 }
+
+void read_config()
+{
+  FILE *cfile;
+  char *line=NULL;
+  char par[20];
+  float value;
+  unsigned int addr;
+  size_t len;
+  ssize_t read;
+
+  cfile=fopen(confile, "r");
+  if(NULL!=cfile)
+  {
+    sprintf(message,"Read configuration file");
+    logmessage(logfile,message,loglev,4);
+
+    while((read=getline(&line,&len,cfile))!=-1)
+    {
+       if(sscanf(line,"%s %f",par,&value)!=EOF) 
+       {
+          if(strncmp(par,"LOGLEVEL",8)==0)
+          {
+             loglev=(int)value;
+             sprintf(message,"Log level set to %d",(int)value);
+             logmessage(logfile,message,loglev,4);
+          }
+          if(strncmp(par,"I2CADDR",7)==0)
+          {
+             if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
+             { 
+                sprintf(message,"TMP102 chip address set to 0x%x",addr);
+                logmessage(logfile,message,loglev,4);
+                address=(int)addr;
+             }
+          }
+          if(strncmp(par,"TEMPINT",7)==0)
+          {
+             tempint=(int)value;
+             sprintf(message,"Temperature reading interval set to %d s",(int)value);
+             logmessage(logfile,message,loglev,4);
+          }
+       }
+    }
+    fclose(cfile);
+  }
+  else
+  {
+    sprintf(message, "Could not open %s", confile);
+    logmessage(logfile, message, loglev,4);
+  }
+}
+
+int cont=1; /* main loop flag */
 
 // read data with i2c from address, length is the number of bytes to read 
 // return: -1=open failed, -2=lock failed, -3=bus access failed, 
@@ -123,8 +179,9 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,1)!=1) 
      {
-       sprintf(message,"Unable to read from slave");
+       sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
+       cont=0;
        return -4;
      }
      else 
@@ -138,8 +195,9 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,2)!=2) 
      {
-       sprintf(message,"Unable to read from slave");
+       sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
+       cont=0;
        return -4;
      }
      else 
@@ -153,8 +211,9 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,4)!=4) 
      {
-       sprintf(message,"Unable to read from slave");
+       sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
+       cont=0;
        return -4;
      }
      else 
@@ -197,14 +256,14 @@ void read_temp()
   value/=16;
   temp=(float)(value*0.0625);
 
-  sprintf(message,"%f C",temp);
-  logmessage(logfile,message,loglev,4);
-
-  write_temp(temp);
+  if(cont==1)
+  {
+    sprintf(message,"%f C",temp);
+    logmessage(logfile,message,loglev,4);
+    write_temp(temp);
+  }
 }
 
-
-int cont=1; /* main loop flag */
 
 void stop(int sig)
 {
@@ -246,6 +305,8 @@ int main()
   signal(SIGTERM,&terminate); 
   signal(SIGQUIT,&stop); 
   signal(SIGHUP,&hup); 
+
+  read_config();
 
   int unxs=(int)time(NULL); // unix seconds
   int nxtemp=unxs; // next time to read temperature

@@ -1,0 +1,16 @@
+#
+# Example configuration file for tmp102d 
+# Fri May 16 22:50:42 CEST 2014
+# Edit: 
+# Jaakko Koivuniemi
+
+# log level 0=debug messages, 1=system commands, 2=operation messages, 
+# 3=status messages, 4=errors/warnings
+LOGLEVEL 3
+
+# i2c address of TMP102, this can be 0x48 - 0x4B
+I2CADDR 0x48
+
+# temperature reading interval [s]
+TEMPINT 300
+
