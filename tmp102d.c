@@ -20,7 +20,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Fri May 16 22:28:37 CEST 2014
+ * Edit: Thu Oct 30 18:32:29 CET 2014
  *
  * Jaakko Koivuniemi
  **/
@@ -38,7 +38,7 @@
 #include <time.h>
 #include <signal.h>
 
-const int version=20140516; // program version
+const int version=20141030; // program version
 int tempint=300; // temperature reading interval [s]
 
 const char tdatafile[200]="/var/lib/tmp102d/temperature";
@@ -165,6 +165,7 @@ int read_data(int address, int length)
   {
     sprintf(message,"Failed to lock i2c port");
     logmessage(logfile,message,loglev,4);
+    close(fd);
     return -2;
   }
 
@@ -172,6 +173,7 @@ int read_data(int address, int length)
   {
     sprintf(message,"Unable to get bus access to talk to slave");
     logmessage(logfile,message,loglev,4);
+    close(fd);
     return -3;
   }
 
@@ -182,6 +184,7 @@ int read_data(int address, int length)
        sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
        cont=0;
+       close(fd);
        return -4;
      }
      else 
@@ -198,6 +201,7 @@ int read_data(int address, int length)
        sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
        cont=0;
+       close(fd);
        return -4;
      }
      else 
@@ -214,6 +218,7 @@ int read_data(int address, int length)
        sprintf(message,"Unable to read from slave, exit");
        logmessage(logfile,message,loglev,4);
        cont=0;
+       close(fd);
        return -4;
      }
      else 
@@ -274,8 +279,6 @@ void stop(int sig)
 
 void terminate(int sig)
 {
-  int ok=0;
-
   sprintf(message,"signal %d catched",sig);
   logmessage(logfile,message,loglev,4);
 
