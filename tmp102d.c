@@ -442,24 +442,29 @@ int main()
     {
       nxtemp1=tempint1+unxs;
       read_temp(address1);
+// optional script to insert the data to local database
+//          ok=system("/usr/sbin/insert-tmp102.sh");
     }
 
     if(((unxs>=nxtemp2)||((nxtemp2-unxs)>tempint2))&&(tempint2>0)&&(address2>=0x48)&&(address2<=0x4B)) 
     {
       nxtemp2=tempint2+unxs;
       read_temp(address2);
+//          ok=system("/usr/sbin/insert-tmp102b.sh");
     }
 
     if(((unxs>=nxtemp3)||((nxtemp3-unxs)>tempint3))&&(tempint3>0)&&(address3>=0x48)&&(address3<=0x4B)) 
     {
       nxtemp3=tempint3+unxs;
       read_temp(address3);
+//          ok=system("/usr/sbin/insert-tmp102c.sh");
     }
 
     if(((unxs>=nxtemp4)||((nxtemp4-unxs)>tempint4))&&(tempint4>0)&&(address4>=0x48)&&(address4<=0x4B)) 
     {
       nxtemp4=tempint4+unxs;
       read_temp(address4);
+//          ok=system("/usr/sbin/insert-tmp102d.sh");
     }
 
     sleep(1);
