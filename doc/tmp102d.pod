@@ -31,6 +31,12 @@ I</usr/sbin/tmp102d>               Daemon code.
 
 I</var/lib/tmp102d/temperature>    Live temperature value.
 
+I</var/lib/tmp102d/temperature2>   Second live temperature value.
+
+I</var/lib/tmp102d/temperature3>   Third live temperature value.
+
+I</var/lib/tmp102d/temperature4>   Fourth live temperature value.
+
 I</var/log/tmp102d.log>            Log file.
 
 I</var/run/tmp102d.pid>            PID file.

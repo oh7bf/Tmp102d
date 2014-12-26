@@ -20,7 +20,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Thu Oct 30 18:32:29 CET 2014
+ * Edit: Fri Dec 26 11:09:47 CET 2014
  *
  * Jaakko Koivuniemi
  **/
@@ -38,13 +38,23 @@
 #include <time.h>
 #include <signal.h>
 
-const int version=20141030; // program version
-int tempint=300; // temperature reading interval [s]
+const int version=20141226; // program version
+int tempint1=300; // temperature reading interval [s]
+int tempint2=0; // second temperature reading interval [s]
+int tempint3=0; // third temperature reading interval [s]
+int tempint4=0; // fourth temperature reading interval [s]
 
-const char tdatafile[200]="/var/lib/tmp102d/temperature";
+const char tdatafile1[200]="/var/lib/tmp102d/temperature";
+const char tdatafile2[200]="/var/lib/tmp102d/temperature2";
+const char tdatafile3[200]="/var/lib/tmp102d/temperature3";
+const char tdatafile4[200]="/var/lib/tmp102d/temperature4";
 
 const char i2cdev[100]="/dev/i2c-1";
-int  address=0x4a;
+int address1=0x4a;
+int address2=0;
+int address3=0;
+int address4=0;
+
 const int  i2lockmax=10; // maximum number of times to try lock i2c port  
 
 const char confile[200]="/etc/tmp102d_config";
@@ -107,19 +117,64 @@ void read_config()
              sprintf(message,"Log level set to %d",(int)value);
              logmessage(logfile,message,loglev,4);
           }
-          if(strncmp(par,"I2CADDR",7)==0)
+          if(strncmp(par,"I2CADDR1",8)==0)
           {
              if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
              { 
-                sprintf(message,"TMP102 chip address set to 0x%x",addr);
+                sprintf(message,"First TMP102 chip address set to 0x%x",addr);
                 logmessage(logfile,message,loglev,4);
-                address=(int)addr;
+                address1=(int)addr;
              }
           }
-          if(strncmp(par,"TEMPINT",7)==0)
+          if(strncmp(par,"I2CADDR2",8)==0)
           {
-             tempint=(int)value;
-             sprintf(message,"Temperature reading interval set to %d s",(int)value);
+             if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
+             { 
+                sprintf(message,"Second TMP102 chip address set to 0x%x",addr);
+                logmessage(logfile,message,loglev,4);
+                address2=(int)addr;
+             }
+          }
+          if(strncmp(par,"I2CADDR3",8)==0)
+          {
+             if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
+             { 
+                sprintf(message,"Third TMP102 chip address set to 0x%x",addr);
+                logmessage(logfile,message,loglev,4);
+                address3=(int)addr;
+             }
+          }
+          if(strncmp(par,"I2CADDR4",8)==0)
+          {
+             if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
+             { 
+                sprintf(message,"Fourth TMP102 chip address set to 0x%x",addr);
+                logmessage(logfile,message,loglev,4);
+                address4=(int)addr;
+             }
+          }
+          if(strncmp(par,"TEMPINT1",8)==0)
+          {
+             tempint1=(int)value;
+             sprintf(message,"First temperature reading interval set to %d s",(int)value);
+             logmessage(logfile,message,loglev,4);
+          }
+          if(strncmp(par,"TEMPINT2",8)==0)
+          {
+             tempint2=(int)value;
+             sprintf(message,"Second temperature reading interval set to %d s",(int)value);
+             logmessage(logfile,message,loglev,4);
+          }
+          if(strncmp(par,"TEMPINT3",8)==0)
+          {
+             tempint3=(int)value;
+             sprintf(message,"Third temperature reading interval set to %d s",(int)value);
+             logmessage(logfile,message,loglev,4);
+          }
+          if(strncmp(par,"TEMPINT4",8)==0)
+          {
+             tempint4=(int)value;
+             sprintf(message,"Fourth temperature reading interval set to %d s",(int)value);
              logmessage(logfile,message,loglev,4);
           }
        }
@@ -234,14 +289,18 @@ int read_data(int address, int length)
   return rdata;
 }
 
-void write_temp(float t)
+void write_temp(float t, int addr)
 {
-  FILE *tfile;
-  tfile=fopen(tdatafile, "w");
+  FILE *tfile=NULL;
+
+  if(addr==address1) tfile=fopen(tdatafile1, "w");
+  else if(addr==address2) tfile=fopen(tdatafile2, "w"); 
+  else if(addr==address3) tfile=fopen(tdatafile3, "w"); 
+  else if(addr==address4) tfile=fopen(tdatafile4, "w"); 
 
   if(NULL==tfile)
   {
-    sprintf(message,"could not write to file: %s",tdatafile);
+    sprintf(message,"could not write to file");
     logmessage(logfile,message,loglev,4);
   }
   else
@@ -251,21 +310,23 @@ void write_temp(float t)
   }
 }
 
-
-void read_temp()
+void read_temp(int addr)
 {
   short value=0;
   float temp=0;
 
-  value=(short)(read_data(address,2));
+  value=(short)(read_data(addr,2));
   value/=16;
   temp=(float)(value*0.0625);
 
   if(cont==1)
   {
-    sprintf(message,"%f C",temp);
+    if(addr==address1) sprintf(message,"T1=%f C",temp);
+    else if(addr==address2) sprintf(message,"T2=%f C",temp);
+    else if(addr==address3) sprintf(message,"T3=%f C",temp);
+    else if(addr==address4) sprintf(message,"T4=%f C",temp);
     logmessage(logfile,message,loglev,4);
-    write_temp(temp);
+    write_temp(temp,addr);
   }
 }
 
@@ -310,9 +371,6 @@ int main()
   signal(SIGHUP,&hup); 
 
   read_config();
-
-  int unxs=(int)time(NULL); // unix seconds
-  int nxtemp=unxs; // next time to read temperature
 
   pid_t pid, sid;
         
@@ -370,14 +428,38 @@ int main()
   fprintf(pidf,"%d\n",getpid());
   fclose(pidf);
 
+  int unxs=(int)time(NULL); // unix seconds
+  int nxtemp1=unxs; // next time to read temperature
+  int nxtemp2=unxs; // next time to read second temperature
+  int nxtemp3=unxs; // next time to read third temperature
+  int nxtemp4=unxs; // next time to read fourth temperature
+
   while(cont==1)
   {
     unxs=(int)time(NULL); 
 
-    if((unxs>=nxtemp)||((nxtemp-unxs)>tempint)) 
+    if(((unxs>=nxtemp1)||((nxtemp1-unxs)>tempint1))&&(tempint1>0)&&(address1>=0x48)&&(address1<=0x4B)) 
     {
-      nxtemp=tempint+unxs;
-      read_temp();
+      nxtemp1=tempint1+unxs;
+      read_temp(address1);
+    }
+
+    if(((unxs>=nxtemp2)||((nxtemp2-unxs)>tempint2))&&(tempint2>0)&&(address2>=0x48)&&(address2<=0x4B)) 
+    {
+      nxtemp2=tempint2+unxs;
+      read_temp(address2);
+    }
+
+    if(((unxs>=nxtemp3)||((nxtemp3-unxs)>tempint3))&&(tempint3>0)&&(address3>=0x48)&&(address3<=0x4B)) 
+    {
+      nxtemp3=tempint3+unxs;
+      read_temp(address3);
+    }
+
+    if(((unxs>=nxtemp4)||((nxtemp4-unxs)>tempint4))&&(tempint4>0)&&(address4>=0x48)&&(address4<=0x4B)) 
+    {
+      nxtemp4=tempint4+unxs;
+      read_temp(address4);
     }
 
     sleep(1);
