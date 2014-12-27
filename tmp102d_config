@@ -9,7 +9,7 @@
 LOGLEVEL 3
 
 # i2c address of TMP102, this can be 0x48 - 0x4B
-I2CADDR 0x48
+I2CADDR1 0x48
 
 # second i2c address of TMP102, this can be 0x48 - 0x4B
 #I2CADDR2 0x49
@@ -21,7 +21,7 @@ I2CADDR 0x48
 #I2CADDR4 0x4B
 
 # temperature reading interval [s]
-TEMPINT 300
+TEMPINT1 300
 
 # temperature reading interval for second TMP102 [s]
 #TEMPINT2 300
