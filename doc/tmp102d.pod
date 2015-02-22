@@ -23,8 +23,6 @@ The operation of the daemon can be checked from the log file.
 
 I</etc/tmp102d_config>             Configuration file. 
 
-I</etc/logrotate.d/tmp102d>        Log rotation configuration file.
-
 I</etc/init.d/tmp102d>             Init script.
 
 I</usr/sbin/tmp102d>               Daemon code.
@@ -36,8 +34,6 @@ I</var/lib/tmp102d/temperature2>   Second live temperature value.
 I</var/lib/tmp102d/temperature3>   Third live temperature value.
 
 I</var/lib/tmp102d/temperature4>   Fourth live temperature value.
-
-I</var/log/tmp102d.log>            Log file.
 
 I</var/run/tmp102d.pid>            PID file.
 
@@ -52,5 +48,5 @@ Jaakko Koivuniemi
 
 =head1 SEE ALSO
 
-i2cdetect(8), i2cset(8), i2cget(8)
+i2cdetect(8), i2cset(8), i2cget(8), sqlite3(1)
 

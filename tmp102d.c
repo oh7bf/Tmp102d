@@ -2,7 +2,7 @@
  * 
  * Read temperature from TMP102 chip with I2C and write it to a log file. 
  *       
- * Copyright (C) 2014 Jaakko Koivuniemi.
+ * Copyright (C) 2014 - 2015 Jaakko Koivuniemi.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Fri Dec 26 11:09:47 CET 2014
+ * Edit: Sun Feb 22 19:39:37 CET 2015
  *
  * Jaakko Koivuniemi
  **/
@@ -37,8 +37,10 @@
 #include <unistd.h>
 #include <time.h>
 #include <signal.h>
+#include <syslog.h>
+#include <sqlite3.h>
 
-const int version=20141226; // program version
+const int version=20150222; // program version
 int tempint1=300; // temperature reading interval [s]
 int tempint2=0; // second temperature reading interval [s]
 int tempint3=0; // third temperature reading interval [s]
@@ -48,6 +50,10 @@ const char tdatafile1[200]="/var/lib/tmp102d/temperature";
 const char tdatafile2[200]="/var/lib/tmp102d/temperature2";
 const char tdatafile3[200]="/var/lib/tmp102d/temperature3";
 const char tdatafile4[200]="/var/lib/tmp102d/temperature4";
+
+// local SQLite database file
+int dbsqlite=0; // store data to local SQLite database
+const char dbfile[200]="/tmp/test.db";
 
 const char i2cdev[100]="/dev/i2c-1";
 int address1=0x4a;
@@ -61,35 +67,8 @@ const char confile[200]="/etc/tmp102d_config";
 
 const char pidfile[200]="/var/run/tmp102d.pid";
 
-int loglev=3;
-const char logfile[200]="/var/log/tmp102d.log";
+int loglev=5; // log level
 char message[200]="";
-
-void logmessage(const char logfile[200], const char message[200], int loglev, int msglev)
-{
-  time_t now;
-  char tstr[25];
-  struct tm* tm_info;
-  FILE *log;
-
-  time(&now);
-  tm_info=localtime(&now);
-  strftime(tstr,25,"%Y-%m-%d %H:%M:%S",tm_info);
-  if(msglev>=loglev)
-  {
-    log=fopen(logfile, "a");
-    if(NULL==log)
-    {
-      perror("could not open log file");
-    }
-    else
-    { 
-      fprintf(log,"%s ",tstr);
-      fprintf(log,"%s\n",message);
-      fclose(log);
-    }
-  }
-}
 
 void read_config()
 {
@@ -104,8 +83,7 @@ void read_config()
   cfile=fopen(confile, "r");
   if(NULL!=cfile)
   {
-    sprintf(message,"Read configuration file");
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_INFO|LOG_DAEMON, "Read configuration file");
 
     while((read=getline(&line,&len,cfile))!=-1)
     {
@@ -115,14 +93,24 @@ void read_config()
           {
              loglev=(int)value;
              sprintf(message,"Log level set to %d",(int)value);
-             logmessage(logfile,message,loglev,4);
+             syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+             setlogmask(LOG_UPTO (loglev));
+          }
+          if(strncmp(par,"DBSQLITE",8)==0)
+          {
+             if(value==1)
+             {
+               dbsqlite=1;
+               sprintf(message, "Store data to database %s", dbfile);
+               syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+             }
           }
           if(strncmp(par,"I2CADDR1",8)==0)
           {
              if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
              { 
                 sprintf(message,"First TMP102 chip address set to 0x%x",addr);
-                logmessage(logfile,message,loglev,4);
+                syslog(LOG_INFO|LOG_DAEMON, "%s", message);
                 address1=(int)addr;
              }
           }
@@ -131,7 +119,7 @@ void read_config()
              if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
              { 
                 sprintf(message,"Second TMP102 chip address set to 0x%x",addr);
-                logmessage(logfile,message,loglev,4);
+                syslog(LOG_INFO|LOG_DAEMON, "%s", message);
                 address2=(int)addr;
              }
           }
@@ -140,7 +128,7 @@ void read_config()
              if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
              { 
                 sprintf(message,"Third TMP102 chip address set to 0x%x",addr);
-                logmessage(logfile,message,loglev,4);
+                syslog(LOG_INFO|LOG_DAEMON, "%s", message);
                 address3=(int)addr;
              }
           }
@@ -149,7 +137,7 @@ void read_config()
              if(sscanf(line,"%s 0x%x",par,&addr)!=EOF)
              { 
                 sprintf(message,"Fourth TMP102 chip address set to 0x%x",addr);
-                logmessage(logfile,message,loglev,4);
+                syslog(LOG_INFO|LOG_DAEMON, "%s", message);
                 address4=(int)addr;
              }
           }
@@ -157,25 +145,25 @@ void read_config()
           {
              tempint1=(int)value;
              sprintf(message,"First temperature reading interval set to %d s",(int)value);
-             logmessage(logfile,message,loglev,4);
+             syslog(LOG_INFO|LOG_DAEMON, "%s", message);
           }
           if(strncmp(par,"TEMPINT2",8)==0)
           {
              tempint2=(int)value;
              sprintf(message,"Second temperature reading interval set to %d s",(int)value);
-             logmessage(logfile,message,loglev,4);
+             syslog(LOG_INFO|LOG_DAEMON, "%s", message);
           }
           if(strncmp(par,"TEMPINT3",8)==0)
           {
              tempint3=(int)value;
              sprintf(message,"Third temperature reading interval set to %d s",(int)value);
-             logmessage(logfile,message,loglev,4);
+             syslog(LOG_INFO|LOG_DAEMON, "%s", message);
           }
           if(strncmp(par,"TEMPINT4",8)==0)
           {
              tempint4=(int)value;
              sprintf(message,"Fourth temperature reading interval set to %d s",(int)value);
-             logmessage(logfile,message,loglev,4);
+             syslog(LOG_INFO|LOG_DAEMON, "%s", message);
           }
        }
     }
@@ -184,7 +172,7 @@ void read_config()
   else
   {
     sprintf(message, "Could not open %s", confile);
-    logmessage(logfile, message, loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
   }
 }
 
@@ -202,8 +190,7 @@ int read_data(int address, int length)
 
   if((fd=open(i2cdev, O_RDWR)) < 0) 
   {
-    sprintf(message,"Failed to open i2c port");
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "Failed to open i2c port");
     return -1;
   }
 
@@ -218,16 +205,14 @@ int read_data(int address, int length)
   }
   if(rd)
   {
-    sprintf(message,"Failed to lock i2c port");
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "Failed to lock i2c port");
     close(fd);
     return -2;
   }
 
   if(ioctl(fd, I2C_SLAVE, address) < 0) 
   {
-    sprintf(message,"Unable to get bus access to talk to slave");
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "Unable to get bus access to talk to slave");
     close(fd);
     return -3;
   }
@@ -236,8 +221,7 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,1)!=1) 
      {
-       sprintf(message,"Unable to read from slave, exit");
-       logmessage(logfile,message,loglev,4);
+       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
        cont=0;
        close(fd);
        return -4;
@@ -245,7 +229,7 @@ int read_data(int address, int length)
      else 
      {
        sprintf(message,"Receive 0x%02x",buf[0]);
-       logmessage(logfile,message,loglev,1); 
+       syslog(LOG_DEBUG, "%s", message); 
        rdata=buf[0];
      }
   } 
@@ -253,8 +237,7 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,2)!=2) 
      {
-       sprintf(message,"Unable to read from slave, exit");
-       logmessage(logfile,message,loglev,4);
+       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
        cont=0;
        close(fd);
        return -4;
@@ -262,7 +245,7 @@ int read_data(int address, int length)
      else 
      {
        sprintf(message,"Receive 0x%02x%02x",buf[0],buf[1]);
-       logmessage(logfile,message,loglev,1);  
+       syslog(LOG_DEBUG, "%s", message);  
        rdata=256*buf[0]+buf[1];
      }
   }
@@ -270,8 +253,7 @@ int read_data(int address, int length)
   {
      if(read(fd, buf,4)!=4) 
      {
-       sprintf(message,"Unable to read from slave, exit");
-       logmessage(logfile,message,loglev,4);
+       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
        cont=0;
        close(fd);
        return -4;
@@ -279,7 +261,7 @@ int read_data(int address, int length)
      else 
      {
         sprintf(message,"Receive 0x%02x%02x%02x%02x",buf[0],buf[1],buf[2],buf[3]);
-        logmessage(logfile,message,loglev,1);  
+        syslog(LOG_DEBUG, "%s", message);  
         rdata=16777216*buf[0]+65536*buf[1]+256*buf[2]+buf[3];
      }
   }
@@ -289,7 +271,7 @@ int read_data(int address, int length)
   return rdata;
 }
 
-void write_temp(float t, int addr)
+void write_temp(double t, int addr)
 {
   FILE *tfile=NULL;
 
@@ -298,11 +280,7 @@ void write_temp(float t, int addr)
   else if(addr==address3) tfile=fopen(tdatafile3, "w"); 
   else if(addr==address4) tfile=fopen(tdatafile4, "w"); 
 
-  if(NULL==tfile)
-  {
-    sprintf(message,"could not write to file");
-    logmessage(logfile,message,loglev,4);
-  }
+  if(NULL==tfile) syslog(LOG_ERR|LOG_DAEMON, "could not write to file");
   else
   { 
     fprintf(tfile,"%2.1f",t);
@@ -310,14 +288,77 @@ void write_temp(float t, int addr)
   }
 }
 
+void insertSQLite(double t, int addr)
+{
+  sqlite3 *db;
+  sqlite3_stmt *stmt; 
+  const char query[200]="insert into tmp102 (name,temperature) values (?,?)";  
+  int rc;
+
+  rc = sqlite3_open(dbfile, &db);
+  if( rc!=SQLITE_OK ){
+    sprintf(message, "Can't open database: %s", sqlite3_errmsg(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    sqlite3_close(db);
+    return;
+  }
+
+  rc = sqlite3_prepare_v2(db, query, 200, &stmt, 0);
+  if( rc==SQLITE_OK )
+  {
+    if( stmt!=NULL )
+    {
+      if(addr==address1) 
+        rc = sqlite3_bind_text(stmt, 1, "T1", 2, SQLITE_STATIC);
+      else if(addr==address2) 
+        rc = sqlite3_bind_text(stmt, 1, "T2", 2, SQLITE_STATIC);
+      else if(addr==address3) 
+        rc = sqlite3_bind_text(stmt, 1, "T3", 2, SQLITE_STATIC);
+      else if(addr==address4) 
+        rc = sqlite3_bind_text(stmt, 1, "T4", 2, SQLITE_STATIC);
+      if( rc!=SQLITE_OK)
+      {
+        sprintf(message, "Binding failed: %s", sqlite3_errmsg(db));
+        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+      }
+
+      rc = sqlite3_bind_double(stmt, 2, t);
+      if( rc!=SQLITE_OK)
+      {
+        sprintf(message, "Binding failed: %s", sqlite3_errmsg(db));
+        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+      }
+
+      rc = sqlite3_step(stmt); 
+      if( rc!=SQLITE_DONE )// could be SQLITE_BUSY here 
+      {
+        sprintf(message, "Statement failed: %s", sqlite3_errmsg(db));
+        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+      }
+    }
+  }
+  else
+  {
+    sprintf(message, "Statement prepare failed: %s", sqlite3_errmsg(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+  }
+
+  rc = sqlite3_finalize(stmt);
+  sqlite3_close(db);
+
+  return;
+}
+
+
+
 void read_temp(int addr)
 {
   short value=0;
-  float temp=0;
+  double temp=0;
 
   value=(short)(read_data(addr,2));
   value/=16;
-  temp=(float)(value*0.0625);
+  temp=(double)(value*0.0625);
 
   if(cont==1)
   {
@@ -325,27 +366,27 @@ void read_temp(int addr)
     else if(addr==address2) sprintf(message,"T2=%f C",temp);
     else if(addr==address3) sprintf(message,"T3=%f C",temp);
     else if(addr==address4) sprintf(message,"T4=%f C",temp);
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_INFO|LOG_DAEMON, "%s", message);
     write_temp(temp,addr);
+    if(dbsqlite==1) insertSQLite(temp,addr);
   }
 }
 
 
 void stop(int sig)
 {
-  sprintf(message,"signal %d catched, stop",sig);
-  logmessage(logfile,message,loglev,4);
+  sprintf(message, "signal %d catched, stop", sig);
+  syslog(LOG_NOTICE|LOG_DAEMON, "%s", message);
   cont=0;
 }
 
 void terminate(int sig)
 {
-  sprintf(message,"signal %d catched",sig);
-  logmessage(logfile,message,loglev,4);
+  sprintf(message, "signal %d catched", sig);
+  syslog(LOG_NOTICE|LOG_DAEMON, "%s", message);
 
   sleep(1);
-  strcpy(message,"stop");
-  logmessage(logfile,message,loglev,4);
+  syslog(LOG_NOTICE|LOG_DAEMON, "stop");
 
   cont=0;
 }
@@ -353,7 +394,7 @@ void terminate(int sig)
 void hup(int sig)
 {
   sprintf(message,"signal %d catched",sig);
-  logmessage(logfile,message,loglev,4);
+  syslog(LOG_NOTICE|LOG_DAEMON, "%s", message);
 }
 
 
@@ -361,8 +402,8 @@ int main()
 {  
   int ok=0;
 
-  sprintf(message,"tmp102d v. %d started",version); 
-  logmessage(logfile,message,loglev,4);
+  setlogmask(LOG_UPTO (loglev));
+  syslog(LOG_NOTICE|LOG_DAEMON, "tmp102d v. %d started",version); 
 
   signal(SIGINT,&stop); 
   signal(SIGKILL,&stop); 
@@ -391,15 +432,13 @@ int main()
   sid=setsid();
   if(sid<0) 
   {
-    strcpy(message,"failed to create child process"); 
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "failed to create child process"); 
     exit(EXIT_FAILURE);
   }
         
   if((chdir("/")) < 0) 
   {
-    strcpy(message,"failed to change to root directory"); 
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "failed to change to root directory"); 
     exit(EXIT_FAILURE);
   }
         
@@ -414,14 +453,14 @@ int main()
   if(pidf==NULL)
   {
     sprintf(message,"Could not open PID lock file %s, exiting", pidfile);
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
     exit(EXIT_FAILURE);
   }
 
   if(flock(fileno(pidf),LOCK_EX||LOCK_NB)==-1)
   {
     sprintf(message,"Could not lock PID lock file %s, exiting", pidfile);
-    logmessage(logfile,message,loglev,4);
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
     exit(EXIT_FAILURE);
   }
 
@@ -442,36 +481,30 @@ int main()
     {
       nxtemp1=tempint1+unxs;
       read_temp(address1);
-// optional script to insert the data to local database
-//          ok=system("/usr/sbin/insert-tmp102.sh");
     }
 
     if(((unxs>=nxtemp2)||((nxtemp2-unxs)>tempint2))&&(tempint2>0)&&(address2>=0x48)&&(address2<=0x4B)) 
     {
       nxtemp2=tempint2+unxs;
       read_temp(address2);
-//          ok=system("/usr/sbin/insert-tmp102b.sh");
     }
 
     if(((unxs>=nxtemp3)||((nxtemp3-unxs)>tempint3))&&(tempint3>0)&&(address3>=0x48)&&(address3<=0x4B)) 
     {
       nxtemp3=tempint3+unxs;
       read_temp(address3);
-//          ok=system("/usr/sbin/insert-tmp102c.sh");
     }
 
     if(((unxs>=nxtemp4)||((nxtemp4-unxs)>tempint4))&&(tempint4>0)&&(address4>=0x48)&&(address4<=0x4B)) 
     {
       nxtemp4=tempint4+unxs;
       read_temp(address4);
-//          ok=system("/usr/sbin/insert-tmp102d.sh");
     }
 
     sleep(1);
   }
 
-  strcpy(message,"remove PID file");
-  logmessage(logfile,message,loglev,4);
+  syslog(LOG_NOTICE|LOG_DAEMON, "remove PID file");
   ok=remove(pidfile);
 
   return ok;

@@ -124,7 +124,7 @@
 .\" ========================================================================
 .\"
 .IX Title "TMP102D 1"
-.TH TMP102D 1 "2014-05-16" "version 20140516" "Raspberry Pi"
+.TH TMP102D 1 "2015-02-22" "version 20150222" "Raspberry Pi"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -150,15 +150,17 @@ The operation of the daemon can be checked from the log file.
 .IX Header "FILES"
 \&\fI/etc/tmp102d_config\fR             Configuration file.
 .PP
-\&\fI/etc/logrotate.d/tmp102d\fR        Log rotation configuration file.
-.PP
 \&\fI/etc/init.d/tmp102d\fR             Init script.
 .PP
 \&\fI/usr/sbin/tmp102d\fR               Daemon code.
 .PP
 \&\fI/var/lib/tmp102d/temperature\fR    Live temperature value.
 .PP
-\&\fI/var/log/tmp102d.log\fR            Log file.
+\&\fI/var/lib/tmp102d/temperature2\fR   Second live temperature value.
+.PP
+\&\fI/var/lib/tmp102d/temperature3\fR   Third live temperature value.
+.PP
+\&\fI/var/lib/tmp102d/temperature4\fR   Fourth live temperature value.
 .PP
 \&\fI/var/run/tmp102d.pid\fR            \s-1PID\s0 file.
 .SH "WARNING"
@@ -170,4 +172,4 @@ unusable.
 Jaakko Koivuniemi
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
-\&\fIi2cdetect\fR\|(8), \fIi2cset\fR\|(8), \fIi2cget\fR\|(8)
+\&\fIi2cdetect\fR\|(8), \fIi2cset\fR\|(8), \fIi2cget\fR\|(8), \fIsqlite3\fR\|(1)
