@@ -10,7 +10,7 @@
 LOGLEVEL 5
 
 # store data to local SQLite database
-# DBSQLITE 0
+# DBSQLITE /tmp/test.db
 
 # i2c address of TMP102, this can be 0x48 - 0x4B
 I2CADDR1 0x48

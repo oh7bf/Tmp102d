@@ -20,7 +20,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Sun Feb 22 19:39:37 CET 2015
+ * Edit: Mon Feb 23 20:40:44 CET 2015
  *
  * Jaakko Koivuniemi
  **/
@@ -40,7 +40,7 @@
 #include <syslog.h>
 #include <sqlite3.h>
 
-const int version=20150222; // program version
+const int version=20150223; // program version
 int tempint1=300; // temperature reading interval [s]
 int tempint2=0; // second temperature reading interval [s]
 int tempint3=0; // third temperature reading interval [s]
@@ -53,7 +53,7 @@ const char tdatafile4[200]="/var/lib/tmp102d/temperature4";
 
 // local SQLite database file
 int dbsqlite=0; // store data to local SQLite database
-const char dbfile[200]="/tmp/test.db";
+char dbfile[200];
 
 const char i2cdev[100]="/dev/i2c-1";
 int address1=0x4a;
@@ -98,12 +98,12 @@ void read_config()
           }
           if(strncmp(par,"DBSQLITE",8)==0)
           {
-             if(value==1)
-             {
-               dbsqlite=1;
-               sprintf(message, "Store data to database %s", dbfile);
-               syslog(LOG_INFO|LOG_DAEMON, "%s", message);
-             }
+            if(sscanf(line,"%s %s",par,dbfile)!=EOF)  
+            {
+              dbsqlite=1;
+              sprintf(message, "Store data to database %s", dbfile);
+              syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+            }
           }
           if(strncmp(par,"I2CADDR1",8)==0)
           {
@@ -295,7 +295,7 @@ void insertSQLite(double t, int addr)
   const char query[200]="insert into tmp102 (name,temperature) values (?,?)";  
   int rc;
 
-  rc = sqlite3_open(dbfile, &db);
+  rc = sqlite3_open_v2(dbfile, &db, SQLITE_OPEN_READWRITE, NULL);
   if( rc!=SQLITE_OK ){
     sprintf(message, "Can't open database: %s", sqlite3_errmsg(db));
     syslog(LOG_ERR|LOG_DAEMON, "%s", message);
@@ -308,6 +308,7 @@ void insertSQLite(double t, int addr)
   {
     if( stmt!=NULL )
     {
+
       if(addr==address1) 
         rc = sqlite3_bind_text(stmt, 1, "T1", 2, SQLITE_STATIC);
       else if(addr==address2) 
@@ -349,7 +350,55 @@ void insertSQLite(double t, int addr)
   return;
 }
 
+int readSQLiteTime()
+{
+  sqlite3 *db;
+  sqlite3_stmt *stmt; 
+  const char query[200]="select datetime()";  
+  int rc;
+  int ok=0;
 
+  rc = sqlite3_open_v2(dbfile, &db, SQLITE_OPEN_READONLY, NULL);
+  if( rc!=SQLITE_OK ){
+    sprintf(message, "Can't open database: %s", sqlite3_errmsg(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    sqlite3_close(db);
+    return 0;
+  }
+
+  rc = sqlite3_prepare_v2(db, query, 200, &stmt, 0);
+  if( rc==SQLITE_OK )
+  {
+    if( stmt!=NULL )
+    {
+      rc = sqlite3_step(stmt); 
+      if( rc!=SQLITE_ROW )// could be SQLITE_BUSY here 
+      {
+        sprintf(message, "Statement failed: %s", sqlite3_errmsg(db));
+        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+        ok=0;
+      }
+      else
+      {
+        sprintf(message, "SQLite time: %s", sqlite3_column_text(stmt, 0));
+        syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+        ok=1;
+      }
+    }
+    else ok=0;
+  }
+  else
+  {
+    sprintf(message, "Statement prepare failed: %s", sqlite3_errmsg(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    ok=0;
+  }
+
+  rc = sqlite3_finalize(stmt);
+  sqlite3_close(db);
+
+  return ok;
+}
 
 void read_temp(int addr)
 {
@@ -371,7 +420,6 @@ void read_temp(int addr)
     if(dbsqlite==1) insertSQLite(temp,addr);
   }
 }
-
 
 void stop(int sig)
 {
@@ -466,6 +514,15 @@ int main()
 
   fprintf(pidf,"%d\n",getpid());
   fclose(pidf);
+
+  if(dbsqlite==1)
+  {
+    if(readSQLiteTime()==0) 
+    {
+      syslog(LOG_ERR|LOG_DAEMON, "SQLite database read failed, drop database connection");
+      dbsqlite=0; 
+    }
+  }
 
   int unxs=(int)time(NULL); // unix seconds
   int nxtemp1=unxs; // next time to read temperature
