@@ -3,24 +3,23 @@
 # Installation script for Rasbian Wheezy. The installation script can be
 # run after compiling the binaries. 
 #
-# The packages 'sqlite3' and 'libsqlite3-dev' are needed for the local 
-# database storage.
-#
 # Installation:
 #
-# a) make
-# 
-# b) cd doc; ./mktmp102d
-# 
-# c) sudo ./install (this script)
+# a) sudo apt-get install sqlite3; sudo apt-get install libsqlite3-dev
 #
-# d) sudo raspi-config (to enable I2C)
-#
-# e) sudo service tmp102d start
+# b) make
 # 
-# f) tail -f /var/log/tmp102d.log
+# c) cd doc; ./mktmp102d
+# 
+# d) sudo ./install (this script)
 #
-# g) sudo update-rc.d tmp102d defaults (optional)
+# e) sudo raspi-config (to enable I2C)
+#
+# f) sudo service tmp102d start
+# 
+# g) tail -f /var/log/daemon.log
+#
+# h) sudo update-rc.d tmp102d defaults (optional)
 # 
 #
 # The directories used and files created or modified by this script:
