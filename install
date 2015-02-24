@@ -13,13 +13,15 @@
 # 
 # d) sudo ./install (this script)
 #
-# e) sudo raspi-config (to enable I2C)
+# e) create SQLite database table, see table/tables.txt
 #
-# f) sudo service tmp102d start
+# f) sudo raspi-config (to enable I2C)
+#
+# g) sudo service tmp102d start
 # 
-# g) tail -f /var/log/daemon.log
+# h) tail -f /var/log/daemon.log
 #
-# h) sudo update-rc.d tmp102d defaults (optional)
+# i) sudo update-rc.d tmp102d defaults (optional)
 # 
 #
 # The directories used and files created or modified by this script:

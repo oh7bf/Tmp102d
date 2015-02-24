@@ -9,7 +9,10 @@ B<tmp102d>
 =head1 DESCRIPTION
 
 The B<tmp102d> is used to read temperature data from TMP102 on Raspberry Pi
-using i2c bus. The daemon is started with command 
+using i2c bus. The temperature is written to a file in directory 
+/var/lib/tmp102d/ and optionally inserted to local SQLite3 database table.
+
+The daemon is started with command 
 
 B<service> I<tmp102d> I<start>
 

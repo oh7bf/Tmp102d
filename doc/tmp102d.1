@@ -124,7 +124,7 @@
 .\" ========================================================================
 .\"
 .IX Title "TMP102D 1"
-.TH TMP102D 1 "2015-02-22" "version 20150222" "Raspberry Pi"
+.TH TMP102D 1 "2015-02-24" "version 20150224" "Raspberry Pi"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -137,7 +137,10 @@ tmp102d \-  monitor temperature from TMP102 using i2c
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
 The \fBtmp102d\fR is used to read temperature data from \s-1TMP102\s0 on Raspberry Pi
-using i2c bus. The daemon is started with command
+using i2c bus. The temperature is written to a file in directory 
+/var/lib/tmp102d/ and optionally inserted to local SQLite3 database table.
+.PP
+The daemon is started with command
 .PP
 \&\fBservice\fR \fItmp102d\fR \fIstart\fR
 .PP
