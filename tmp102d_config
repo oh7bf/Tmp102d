@@ -1,7 +1,8 @@
 #
 # Example configuration file for tmp102d 
 # Fri May 16 22:50:42 CEST 2014
-# Edit: Sun Feb 22 20:56:45 CET 2015
+# Edit: Wed Feb 25 22:24:26 CET 2015
+#
 # Jaakko Koivuniemi
 
 # log level, see syslog(3) 
@@ -11,6 +12,13 @@ LOGLEVEL 5
 
 # store data to local SQLite database
 # DBSQLITE /tmp/test.db
+
+# store data to MySQL database
+# DBMYSQLHOST localhost
+# DBMYSQLUSER user
+# DBMYSQLPSWD password
+# DBMYSQLDB   database
+# DBMYSQLPORT 3306
 
 # i2c address of TMP102, this can be 0x48 - 0x4B
 I2CADDR1 0x48

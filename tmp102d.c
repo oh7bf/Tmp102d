@@ -1,6 +1,7 @@
 /**************************************************************************
  * 
- * Read temperature from TMP102 chip with I2C and write it to a log file. 
+ * Read temperature from TMP102 chip with I2C and write it to a file and
+ * database. 
  *       
  * Copyright (C) 2014 - 2015 Jaakko Koivuniemi.
  *
@@ -20,7 +21,7 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Mon Feb 23 20:40:44 CET 2015
+ * Edit: Thu Feb 26 20:13:08 CET 2015
  *
  * Jaakko Koivuniemi
  **/
@@ -39,8 +40,10 @@
 #include <signal.h>
 #include <syslog.h>
 #include <sqlite3.h>
+#include <my_global.h>
+#include <mysql.h>
 
-const int version=20150223; // program version
+const int version=20150226; // program version
 int tempint1=300; // temperature reading interval [s]
 int tempint2=0; // second temperature reading interval [s]
 int tempint3=0; // third temperature reading interval [s]
@@ -54,6 +57,16 @@ const char tdatafile4[200]="/var/lib/tmp102d/temperature4";
 // local SQLite database file
 int dbsqlite=0; // store data to local SQLite database
 char dbfile[200];
+
+// MySQL database
+int dbmysql=0; // store data to MySQL database
+char dbhost[200]="";
+char dbuser[200]="";
+char dbpswd[200]="";
+char database[200]="";
+int dbport=3306;
+#define HOSTNAME_SIZE 63
+#define SENSORNAME_SIZE 20
 
 const char i2cdev[100]="/dev/i2c-1";
 int address1=0x4a;
@@ -104,6 +117,46 @@ void read_config()
               sprintf(message, "Store data to database %s", dbfile);
               syslog(LOG_INFO|LOG_DAEMON, "%s", message);
             }
+          }
+          if(strncmp(par,"DBMYSQLHOST",11)==0)
+          {
+            if(sscanf(line,"%s %s",par,dbhost)!=EOF)  
+            {
+              dbmysql=1;
+              sprintf(message, "MySQL host %s", dbhost);
+              syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+            }
+          }
+          if(strncmp(par,"DBMYSQLUSER",11)==0)
+          {
+            if(sscanf(line,"%s %s",par,dbuser)!=EOF)  
+            {
+              dbmysql=1;
+              sprintf(message, "MySQL user %s", dbuser);
+              syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+            }
+          }
+          if(strncmp(par,"DBMYSQLPSWD",11)==0)
+          {
+            if(sscanf(line,"%s %s",par,dbpswd)!=EOF)  
+            {
+              dbmysql=1;
+              syslog(LOG_INFO|LOG_DAEMON, "MySQL password set");
+            }
+          }
+          if(strncmp(par,"DBMYSQLDB",9)==0)
+          {
+            if(sscanf(line,"%s %s",par,database)!=EOF)  
+            {
+              dbmysql=1;
+              sprintf(message, "MySQL database %s", database);
+              syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+            }
+          }
+          if(strncmp(par,"DBMYSQLPORT",11)==0)
+          {
+            dbport=(int)value;
+            syslog(LOG_INFO|LOG_DAEMON, "MySQL host port %d", dbport);
           }
           if(strncmp(par,"I2CADDR1",8)==0)
           {
@@ -308,7 +361,6 @@ void insertSQLite(double t, int addr)
   {
     if( stmt!=NULL )
     {
-
       if(addr==address1) 
         rc = sqlite3_bind_text(stmt, 1, "T1", 2, SQLITE_STATIC);
       else if(addr==address2) 
@@ -400,6 +452,152 @@ int readSQLiteTime()
   return ok;
 }
 
+
+int readMySQLTime()
+{
+  MYSQL *db = mysql_init(NULL);
+
+  if( db==NULL )
+  {
+    sprintf(message, "MySQL handle creation failed: %s",  mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    return 0;
+  }
+
+  if( mysql_real_connect(db, dbhost, dbuser, dbpswd, database, dbport, NULL, 0)==NULL ) 
+  {
+      sprintf(message, "MySQL connection failed: %s", mysql_error(db));
+      syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+      mysql_close(db);
+      return 0;
+  }  
+
+  if( mysql_query(db, "select now()") ) 
+  {
+    sprintf(message, "MySQL statement failed: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);   
+    mysql_close(db);
+    return 0;
+  }
+
+  MYSQL_RES *result = mysql_store_result(db);
+
+  if( result==NULL ) 
+  {
+    sprintf(message, "MySQL time could not be read: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    mysql_close(db);
+    return 0;
+  }
+
+  MYSQL_ROW row;
+  if( mysql_num_fields(result)==1 )
+  {
+    row=mysql_fetch_row(result);
+    if( row )
+    {
+      sprintf(message, "MySQL time: %s", row[0]);
+      syslog(LOG_INFO|LOG_DAEMON, "%s", message);
+    }
+    else
+    { 
+      syslog(LOG_ERR|LOG_DAEMON, "MySQL time reading failed");
+      mysql_close(db);
+      return 0;
+    }
+  }
+  else 
+  {
+    syslog(LOG_ERR|LOG_DAEMON, "MySQL time reading failed");
+    mysql_close(db);
+    return 0;
+  }
+
+  mysql_close(db);
+  return 1;
+}
+
+int insertMySQL(double t, int addr)
+{
+  char name[SENSORNAME_SIZE]="";
+  char myhost[HOSTNAME_SIZE]="";
+  float temperature=(float)t;
+
+  MYSQL *db = mysql_init(NULL);
+
+  if( db==NULL )
+  {
+    sprintf(message, "MySQL handle creation failed: %s",  mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    return 0;
+  }
+
+  if( mysql_real_connect(db, dbhost, dbuser, dbpswd, database, dbport, NULL, 0)==NULL ) 
+  {
+    sprintf(message, "MySQL connection failed: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    mysql_close(db);
+    return 0;
+  }  
+
+  MYSQL_STMT *stmt = mysql_stmt_init(db);
+
+  if( stmt==NULL )
+  {
+    sprintf(message, "MySQL statement handler creation failed %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    mysql_close(db);
+    return 0;
+  }
+
+  char instmt[200]="insert into tmp102 values(default,default,?,?)";
+  if( mysql_stmt_prepare(stmt, instmt, strlen(instmt))!=0 )
+  {
+    sprintf(message, "MySQL statement prepare failed: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+    mysql_stmt_close(stmt);
+    mysql_close(db);
+    return 0;
+  } 
+
+  size_t len=HOSTNAME_SIZE;
+  if( gethostname(myhost, len)!=0 )
+  {
+    sprintf(message, "gethostname failed: %s", strerror(errno));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+  }
+
+  if(addr==address1) snprintf(name, SENSORNAME_SIZE, "T1@%s", myhost); 
+  else if(addr==address2) snprintf(name, SENSORNAME_SIZE, "T2@%s", myhost); 
+  else if(addr==address3) snprintf(name, SENSORNAME_SIZE, "T3@%s", myhost);
+  else if(addr==address4) snprintf(name, SENSORNAME_SIZE, "T4@%s", myhost);
+
+  MYSQL_BIND bind[2];
+  memset(bind, 0, sizeof(bind));
+  bind[0].buffer_type= MYSQL_TYPE_STRING;
+  bind[0].buffer= (char *)name;
+  bind[0].buffer_length= strlen(name);
+  bind[0].is_null= 0;
+  bind[0].length= 0;
+
+  bind[1].buffer_type= MYSQL_TYPE_FLOAT;
+  bind[1].buffer= (char *)&temperature;
+  bind[1].is_null= 0;
+  bind[1].length= 0;
+
+// error handling here
+  mysql_stmt_bind_param(stmt, bind);
+// error handling here
+  mysql_stmt_execute(stmt);
+
+  mysql_stmt_close(stmt);
+  mysql_close(db);
+
+  return 1;
+}
+
+
+
 void read_temp(int addr)
 {
   short value=0;
@@ -418,6 +616,7 @@ void read_temp(int addr)
     syslog(LOG_INFO|LOG_DAEMON, "%s", message);
     write_temp(temp,addr);
     if(dbsqlite==1) insertSQLite(temp,addr);
+    if(dbmysql==1) insertMySQL(temp,addr);
   }
 }
 
@@ -521,6 +720,15 @@ int main()
     {
       syslog(LOG_ERR|LOG_DAEMON, "SQLite database read failed, drop database connection");
       dbsqlite=0; 
+    }
+  }
+
+  if(dbmysql==1)
+  {
+    if(readMySQLTime()==0) 
+    {
+      syslog(LOG_ERR|LOG_DAEMON, "MySQL database read failed, drop database connection");
+      dbmysql=0; 
     }
   }
 

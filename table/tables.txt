@@ -19,3 +19,16 @@ c) sudo mkdir /var/database
 
 d) sudo mv /tmp/tmp102d.db /var/database/weather.db
 
+
+MySQL database storage
+----------------------
+
+Documentation from http://dev.mysql.com
+
+create table tmp102(
+no int(7) auto_increment key,
+ts timestamp default current_timestamp on update current_timestamp,
+name varchar(20),
+temperature float
+);
+

@@ -7,9 +7,9 @@
 # Jaakko Koivuniemi
 
 CXX           = gcc
-CXXFLAGS      = -g -O -Wall 
+CXXFLAGS      = -g -O -Wall -I/usr/include/mysql/ 
 LD            = gcc
-LDFLAGS       = -lsqlite3 -O
+LDFLAGS       = -L/usr/lib/mysql -lmysqlclient -lsqlite3 -O
 
 %.o : %.c
 	$(CXX) $(CXXFLAGS) -c $<
