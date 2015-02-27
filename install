@@ -99,7 +99,7 @@ fi
 
 if [ ! -r ${CONFDIR}/tmp102d_config ]; then
   echo "Write default configuration file ${CONFDIR}/tmp102d_config"
-  /usr/bin/install -C -m 664 ${SOURCEDIR}/tmp102d_config ${CONFDIR} 
+  /usr/bin/install -C -m 660 ${SOURCEDIR}/tmp102d_config ${CONFDIR} 
 else
   echo "Configuration file ${CONFDIR}/tmp102d_config already exists" 
 fi
