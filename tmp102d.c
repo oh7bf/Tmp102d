@@ -21,10 +21,13 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Thu Feb 26 20:13:08 CET 2015
+ * Edit: Fri Feb 27 22:06:11 CET 2015
  *
  * Jaakko Koivuniemi
  **/
+
+#define HOSTNAME_SIZE 63
+#define SENSORNAME_SIZE 20
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +46,7 @@
 #include <my_global.h>
 #include <mysql.h>
 
-const int version=20150226; // program version
+const int version=20150227; // program version
 int tempint1=300; // temperature reading interval [s]
 int tempint2=0; // second temperature reading interval [s]
 int tempint3=0; // third temperature reading interval [s]
@@ -65,8 +68,6 @@ char dbuser[200]="";
 char dbpswd[200]="";
 char database[200]="";
 int dbport=3306;
-#define HOSTNAME_SIZE 63
-#define SENSORNAME_SIZE 20
 
 const char i2cdev[100]="/dev/i2c-1";
 int address1=0x4a;
@@ -585,18 +586,23 @@ int insertMySQL(double t, int addr)
   bind[1].is_null= 0;
   bind[1].length= 0;
 
-// error handling here
-  mysql_stmt_bind_param(stmt, bind);
-// error handling here
-  mysql_stmt_execute(stmt);
+  if( mysql_stmt_bind_param(stmt, bind) != 0)
+  {
+    sprintf(message, "MySQL statement bind failed: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+  }
+
+  if( mysql_stmt_execute(stmt) != 0)
+  {
+    sprintf(message, "MySQL statement execution failed: %s", mysql_error(db));
+    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+  }
 
   mysql_stmt_close(stmt);
   mysql_close(db);
 
   return 1;
 }
-
-
 
 void read_temp(int addr)
 {
