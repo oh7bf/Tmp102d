@@ -34,7 +34,7 @@
 # /var/lib/tmp102d                   - live temperature data
 #
 # Thu May 29 13:29:01 CEST 2014
-# Edit: Sun Feb 22 19:07:45 CET 2015
+# Edit: Sun Apr 19 15:26:34 CEST 2015
 # 
 # Jaakko Koivuniemi
 #
@@ -109,6 +109,22 @@ if [ -d /var/lib/tmp102d ]; then
 else
   echo "Create directory /var/lib/tmp102d"
   /bin/mkdir -m 775 /var/lib/tmp102d
+fi
+
+if /bin/grep -Fxq "i2c-bcm2708" /etc/modules
+then
+  echo "i2c-bcm2708 found from /etc/modules"
+else
+  echo "Add i2c-bcm2708 to /etc/modules"
+  echo "i2c-bcm2708" >> /etc/modules
+fi
+
+if /bin/grep -Fxq "i2c-dev" /etc/modules
+then
+  echo "i2c-dev found from /etc/modules"
+else
+  echo "Add i2c-dev to /etc/modules"
+  echo "i2c-dev" >> /etc/modules
 fi
 
 echo "Run 'update-rc.d tmp102d defaults' to automatically start at boot time"
