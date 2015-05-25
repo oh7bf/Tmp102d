@@ -3,7 +3,7 @@
 # Makefile for compiling 'tmp102d' on Raspberry Pi. 
 #
 # Tue Feb 25 21:25:42 CET 2014
-# Edit: 
+# Edit: Sun May 24 21:04:31 CEST 2015
 # Jaakko Koivuniemi
 
 CXX           = gcc
@@ -16,7 +16,7 @@ LDFLAGS       = -L/usr/lib/mysql -lmysqlclient -lsqlite3 -O
 
 all: tmp102d 
 
-tmp102d: tmp102d.o
+tmp102d: InsertSQLite.o ReadSQLiteTime.o ReadMySQLTime.o InsertMySQL.o I2cReadBytes.o tmp102d.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 clean:

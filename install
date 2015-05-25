@@ -42,7 +42,7 @@
 
 # source directory for 'Tmp102d'
 SOURCEDIR=${PWD}
-SOURCEBIN=${SOURCEDIR}/
+SOURCEBIN=${SOURCEDIR}/src
 SOURCEMAN=${SOURCEDIR}/doc
 
 # binary executables 

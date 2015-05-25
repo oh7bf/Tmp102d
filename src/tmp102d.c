@@ -21,32 +21,20 @@
  ****************************************************************************
  *
  * Tue Feb 25 21:28:38 CET 2014
- * Edit: Fri Feb 27 22:06:11 CET 2015
+ * Edit: Mon May 25 22:59:38 CEST 2015
  *
  * Jaakko Koivuniemi
  **/
 
-#define HOSTNAME_SIZE 63
-#define SENSORNAME_SIZE 20
+#include "tmp102d.h"
+#include "InsertSQLite.h"
+#include "ReadSQLiteTime.h"
+#include "InsertMySQL.h"
+#include "ReadMySQLTime.h"
+#include "I2cReadBytes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <linux/i2c-dev.h>
-#include <fcntl.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <unistd.h>
-#include <time.h>
-#include <signal.h>
-#include <syslog.h>
-#include <sqlite3.h>
-#include <my_global.h>
-#include <mysql.h>
 
-const int version=20150227; // program version
+const int version=20150525; // program version
 int tempint1=300; // temperature reading interval [s]
 int tempint2=0; // second temperature reading interval [s]
 int tempint3=0; // third temperature reading interval [s]
@@ -59,23 +47,21 @@ const char tdatafile4[200]="/var/lib/tmp102d/temperature4";
 
 // local SQLite database file
 int dbsqlite=0; // store data to local SQLite database
-char dbfile[200];
+char dbfile[ SQLITEFILENAME_SIZE ];
 
 // MySQL database
 int dbmysql=0; // store data to MySQL database
-char dbhost[200]="";
-char dbuser[200]="";
-char dbpswd[200]="";
-char database[200]="";
+char dbhost[ DBHOSTNAME_SIZE ]="";
+char dbuser[ DBUSER_SIZE ]="";
+char dbpswd[ DBPSWD_SIZE ]="";
+char database[ DBNAME_SIZE ]="";
 int dbport=3306;
 
-const char i2cdev[100]="/dev/i2c-1";
+const char *i2cdev="/dev/i2c-1";
 int address1=0x4a;
 int address2=0;
 int address3=0;
 int address4=0;
-
-const int  i2lockmax=10; // maximum number of times to try lock i2c port  
 
 const char confile[200]="/etc/tmp102d_config";
 
@@ -232,99 +218,6 @@ void read_config()
 
 int cont=1; /* main loop flag */
 
-// read data with i2c from address, length is the number of bytes to read 
-// return: -1=open failed, -2=lock failed, -3=bus access failed, 
-// -4=i2c slave reading failed
-int read_data(int address, int length)
-{
-  int rdata=0;
-  int fd,rd;
-  int cnt=0;
-  unsigned char buf[10];
-
-  if((fd=open(i2cdev, O_RDWR)) < 0) 
-  {
-    syslog(LOG_ERR|LOG_DAEMON, "Failed to open i2c port");
-    return -1;
-  }
-
-  rd=flock(fd, LOCK_EX|LOCK_NB);
-
-  cnt=i2lockmax;
-  while((rd==1)&&(cnt>0)) // try again if port locking failed
-  {
-    sleep(1);
-    rd=flock(fd, LOCK_EX|LOCK_NB);
-    cnt--;
-  }
-  if(rd)
-  {
-    syslog(LOG_ERR|LOG_DAEMON, "Failed to lock i2c port");
-    close(fd);
-    return -2;
-  }
-
-  if(ioctl(fd, I2C_SLAVE, address) < 0) 
-  {
-    syslog(LOG_ERR|LOG_DAEMON, "Unable to get bus access to talk to slave");
-    close(fd);
-    return -3;
-  }
-
-  if(length==1)
-  {
-     if(read(fd, buf,1)!=1) 
-     {
-       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
-       cont=0;
-       close(fd);
-       return -4;
-     }
-     else 
-     {
-       sprintf(message,"Receive 0x%02x",buf[0]);
-       syslog(LOG_DEBUG, "%s", message); 
-       rdata=buf[0];
-     }
-  } 
-  else if(length==2)
-  {
-     if(read(fd, buf,2)!=2) 
-     {
-       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
-       cont=0;
-       close(fd);
-       return -4;
-     }
-     else 
-     {
-       sprintf(message,"Receive 0x%02x%02x",buf[0],buf[1]);
-       syslog(LOG_DEBUG, "%s", message);  
-       rdata=256*buf[0]+buf[1];
-     }
-  }
-  else if(length==4)
-  {
-     if(read(fd, buf,4)!=4) 
-     {
-       syslog(LOG_ERR|LOG_DAEMON, "Unable to read from slave, exit");
-       cont=0;
-       close(fd);
-       return -4;
-     }
-     else 
-     {
-        sprintf(message,"Receive 0x%02x%02x%02x%02x",buf[0],buf[1],buf[2],buf[3]);
-        syslog(LOG_DEBUG, "%s", message);  
-        rdata=16777216*buf[0]+65536*buf[1]+256*buf[2]+buf[3];
-     }
-  }
-
-  close(fd);
-
-  return rdata;
-}
-
 void write_temp(double t, int addr)
 {
   FILE *tfile=NULL;
@@ -342,266 +235,46 @@ void write_temp(double t, int addr)
   }
 }
 
-void insertSQLite(double t, int addr)
+void InsSQLite(const char dbfile[ SQLITEFILENAME_SIZE ], double t, int addr)
 {
-  sqlite3 *db;
-  sqlite3_stmt *stmt; 
-  const char query[200]="insert into tmp102 (name,temperature) values (?,?)";  
-  int rc;
+  const char query[ SQLITEQUERY_SIZE ] = "insert into tmp102 (name,temperature) values (?,?)";  
+  double data[ SQLITE_DOUBLES ];
 
-  rc = sqlite3_open_v2(dbfile, &db, SQLITE_OPEN_READWRITE, NULL);
-  if( rc!=SQLITE_OK ){
-    sprintf(message, "Can't open database: %s", sqlite3_errmsg(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    sqlite3_close(db);
-    return;
+  data[0] = t;
+  if( addr == TMP102_ADDRESS1 )
+  { 
+    InsertSQLite(dbfile, query, "T1", 1, data);
   }
-
-  rc = sqlite3_prepare_v2(db, query, 200, &stmt, 0);
-  if( rc==SQLITE_OK )
-  {
-    if( stmt!=NULL )
-    {
-      if(addr==address1) 
-        rc = sqlite3_bind_text(stmt, 1, "T1", 2, SQLITE_STATIC);
-      else if(addr==address2) 
-        rc = sqlite3_bind_text(stmt, 1, "T2", 2, SQLITE_STATIC);
-      else if(addr==address3) 
-        rc = sqlite3_bind_text(stmt, 1, "T3", 2, SQLITE_STATIC);
-      else if(addr==address4) 
-        rc = sqlite3_bind_text(stmt, 1, "T4", 2, SQLITE_STATIC);
-      if( rc!=SQLITE_OK)
-      {
-        sprintf(message, "Binding failed: %s", sqlite3_errmsg(db));
-        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-      }
-
-      rc = sqlite3_bind_double(stmt, 2, t);
-      if( rc!=SQLITE_OK)
-      {
-        sprintf(message, "Binding failed: %s", sqlite3_errmsg(db));
-        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-      }
-
-      rc = sqlite3_step(stmt); 
-      if( rc!=SQLITE_DONE )// could be SQLITE_BUSY here 
-      {
-        sprintf(message, "Statement failed: %s", sqlite3_errmsg(db));
-        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-      }
-    }
+  else if( addr == TMP102_ADDRESS2 )
+  { 
+    InsertSQLite(dbfile, query, "T2", 1, data);
   }
-  else
-  {
-    sprintf(message, "Statement prepare failed: %s", sqlite3_errmsg(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
+  else if( addr == TMP102_ADDRESS3 )
+  { 
+    InsertSQLite(dbfile, query, "T3", 1, data);
   }
-
-  rc = sqlite3_finalize(stmt);
-  sqlite3_close(db);
+  else if( addr == TMP102_ADDRESS4 )
+  { 
+    InsertSQLite(dbfile, query, "T4", 1, data);
+  }
 
   return;
 }
 
-int readSQLiteTime()
+void InsMySQL(double t, int addr)
 {
-  sqlite3 *db;
-  sqlite3_stmt *stmt; 
-  const char query[200]="select datetime()";  
-  int rc;
-  int ok=0;
+  const char query[ SQLITEQUERY_SIZE ] = "insert into tmp102 values(default,default,?,?)";
+  double data[ SQLITE_DOUBLES ];
+  data[0] = t;
 
-  rc = sqlite3_open_v2(dbfile, &db, SQLITE_OPEN_READONLY, NULL);
-  if( rc!=SQLITE_OK ){
-    sprintf(message, "Can't open database: %s", sqlite3_errmsg(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    sqlite3_close(db);
-    return 0;
-  }
-
-  rc = sqlite3_prepare_v2(db, query, 200, &stmt, 0);
-  if( rc==SQLITE_OK )
-  {
-    if( stmt!=NULL )
-    {
-      rc = sqlite3_step(stmt); 
-      if( rc!=SQLITE_ROW )// could be SQLITE_BUSY here 
-      {
-        sprintf(message, "Statement failed: %s", sqlite3_errmsg(db));
-        syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-        ok=0;
-      }
-      else
-      {
-        sprintf(message, "SQLite time: %s", sqlite3_column_text(stmt, 0));
-        syslog(LOG_INFO|LOG_DAEMON, "%s", message);
-        ok=1;
-      }
-    }
-    else ok=0;
-  }
-  else
-  {
-    sprintf(message, "Statement prepare failed: %s", sqlite3_errmsg(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    ok=0;
-  }
-
-  rc = sqlite3_finalize(stmt);
-  sqlite3_close(db);
-
-  return ok;
-}
-
-
-int readMySQLTime()
-{
-  MYSQL *db = mysql_init(NULL);
-
-  if( db==NULL )
-  {
-    sprintf(message, "MySQL handle creation failed: %s",  mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    return 0;
-  }
-
-  if( mysql_real_connect(db, dbhost, dbuser, dbpswd, database, dbport, NULL, 0)==NULL ) 
-  {
-      sprintf(message, "MySQL connection failed: %s", mysql_error(db));
-      syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-      mysql_close(db);
-      return 0;
-  }  
-
-  if( mysql_query(db, "select now()") ) 
-  {
-    sprintf(message, "MySQL statement failed: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);   
-    mysql_close(db);
-    return 0;
-  }
-
-  MYSQL_RES *result = mysql_store_result(db);
-
-  if( result==NULL ) 
-  {
-    sprintf(message, "MySQL time could not be read: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    mysql_close(db);
-    return 0;
-  }
-
-  MYSQL_ROW row;
-  if( mysql_num_fields(result)==1 )
-  {
-    row=mysql_fetch_row(result);
-    if( row )
-    {
-      sprintf(message, "MySQL time: %s", row[0]);
-      syslog(LOG_INFO|LOG_DAEMON, "%s", message);
-    }
-    else
-    { 
-      syslog(LOG_ERR|LOG_DAEMON, "MySQL time reading failed");
-      mysql_close(db);
-      return 0;
-    }
-  }
-  else 
-  {
-    syslog(LOG_ERR|LOG_DAEMON, "MySQL time reading failed");
-    mysql_close(db);
-    return 0;
-  }
-
-  mysql_close(db);
-  return 1;
-}
-
-int insertMySQL(double t, int addr)
-{
-  char name[SENSORNAME_SIZE]="";
-  char myhost[HOSTNAME_SIZE]="";
-  float temperature=(float)t;
-
-  MYSQL *db = mysql_init(NULL);
-
-  if( db==NULL )
-  {
-    sprintf(message, "MySQL handle creation failed: %s",  mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    return 0;
-  }
-
-  if( mysql_real_connect(db, dbhost, dbuser, dbpswd, database, dbport, NULL, 0)==NULL ) 
-  {
-    sprintf(message, "MySQL connection failed: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    mysql_close(db);
-    return 0;
-  }  
-
-  MYSQL_STMT *stmt = mysql_stmt_init(db);
-
-  if( stmt==NULL )
-  {
-    sprintf(message, "MySQL statement handler creation failed %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    mysql_close(db);
-    return 0;
-  }
-
-  char instmt[200]="insert into tmp102 values(default,default,?,?)";
-  if( mysql_stmt_prepare(stmt, instmt, strlen(instmt))!=0 )
-  {
-    sprintf(message, "MySQL statement prepare failed: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-    mysql_stmt_close(stmt);
-    mysql_close(db);
-    return 0;
-  } 
-
-  size_t len=HOSTNAME_SIZE;
-  if( gethostname(myhost, len)!=0 )
-  {
-    sprintf(message, "gethostname failed: %s", strerror(errno));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-  }
-
-  if(addr==address1) snprintf(name, SENSORNAME_SIZE, "T1@%s", myhost); 
-  else if(addr==address2) snprintf(name, SENSORNAME_SIZE, "T2@%s", myhost); 
-  else if(addr==address3) snprintf(name, SENSORNAME_SIZE, "T3@%s", myhost);
-  else if(addr==address4) snprintf(name, SENSORNAME_SIZE, "T4@%s", myhost);
-
-  MYSQL_BIND bind[2];
-  memset(bind, 0, sizeof(bind));
-  bind[0].buffer_type= MYSQL_TYPE_STRING;
-  bind[0].buffer= (char *)name;
-  bind[0].buffer_length= strlen(name);
-  bind[0].is_null= 0;
-  bind[0].length= 0;
-
-  bind[1].buffer_type= MYSQL_TYPE_FLOAT;
-  bind[1].buffer= (char *)&temperature;
-  bind[1].is_null= 0;
-  bind[1].length= 0;
-
-  if( mysql_stmt_bind_param(stmt, bind) != 0)
-  {
-    sprintf(message, "MySQL statement bind failed: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-  }
-
-  if( mysql_stmt_execute(stmt) != 0)
-  {
-    sprintf(message, "MySQL statement execution failed: %s", mysql_error(db));
-    syslog(LOG_ERR|LOG_DAEMON, "%s", message);
-  }
-
-  mysql_stmt_close(stmt);
-  mysql_close(db);
-
-  return 1;
+  if( addr == TMP102_ADDRESS1 )
+    InsertMySQL(dbhost, dbuser, dbpswd, database, dbport, query, "T1", 1, data);
+  else if( addr == TMP102_ADDRESS2 )
+    InsertMySQL(dbhost, dbuser, dbpswd, database, dbport, query, "T2", 1, data);
+  else if( addr == TMP102_ADDRESS3 )
+    InsertMySQL(dbhost, dbuser, dbpswd, database, dbport, query, "T3", 1, data);
+  else if( addr == TMP102_ADDRESS4 )
+    InsertMySQL(dbhost, dbuser, dbpswd, database, dbport, query, "T4", 1, data);
 }
 
 void read_temp(int addr)
@@ -609,7 +282,7 @@ void read_temp(int addr)
   short value=0;
   double temp=0;
 
-  value=(short)(read_data(addr,2));
+  value=(short)(I2cReadBytes(addr, 2));
   value/=16;
   temp=(double)(value*0.0625);
 
@@ -621,8 +294,8 @@ void read_temp(int addr)
     else if(addr==address4) sprintf(message,"T4=%f C",temp);
     syslog(LOG_INFO|LOG_DAEMON, "%s", message);
     write_temp(temp,addr);
-    if(dbsqlite==1) insertSQLite(temp,addr);
-    if(dbmysql==1) insertMySQL(temp,addr);
+    if(dbsqlite==1) InsSQLite(dbfile, temp, addr);
+    if(dbmysql==1) InsMySQL(temp, addr);
   }
 }
 
@@ -720,18 +393,18 @@ int main()
   fprintf(pidf,"%d\n",getpid());
   fclose(pidf);
 
-  if(dbsqlite==1)
+  if( dbsqlite == 1 )
   {
-    if(readSQLiteTime()==0) 
+    if( ReadSQLiteTime( dbfile ) == 0 ) 
     {
       syslog(LOG_ERR|LOG_DAEMON, "SQLite database read failed, drop database connection");
       dbsqlite=0; 
     }
   }
 
-  if(dbmysql==1)
+  if( dbmysql == 1 )
   {
-    if(readMySQLTime()==0) 
+    if( ReadMySQLTime(dbhost, dbuser, dbpswd, database, dbport) == 0 ) 
     {
       syslog(LOG_ERR|LOG_DAEMON, "MySQL database read failed, drop database connection");
       dbmysql=0; 
